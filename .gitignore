@@ -1,0 +1,45 @@
+# Maven
+target/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Java
+*.class
+
+# Logs
+*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Files
+.env
+
+# RabbitMQ Local Config (if added later)
+rabbitmq-data/
+
+# Temporary Files
+*.tmp
+*.temp
+
+# Eclipse Workspace Metadata
+.metadata/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Maven
+target/
