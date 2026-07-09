@@ -325,15 +325,35 @@ public void handleShutdownSignal(
                     "Cannot start consuming: Channel is not available.");
         }
 
+        System.out.println(
+                "Starting consumer on queue: "
+                        + this.queueName);
+
         DefaultConsumer messageHandler =
                 new TaskMessageHandler(
                         this.channel);
 
-        System.out.println(
-                "TaskMessageHandler created successfully.");
+        try {
 
-        System.out.println(
-                "Placeholder: basicConsume() will be added in next task.");
+            channel.basicConsume(
+                    this.queueName,
+                    false,
+                    "",
+                    messageHandler
+            );
+
+            System.out.println(
+                    "basicConsume registered successfully for queue: "
+                            + this.queueName);
+
+        } catch (IOException e) {
+
+            System.err.println(
+                    "Failed to start consumer for queue: "
+                            + this.queueName);
+
+            throw e;
+        }
     }
 
     @Override
