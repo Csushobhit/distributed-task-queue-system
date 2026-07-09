@@ -1,0 +1,366 @@
+package com.sushobhit.taskqueue.producer;
+
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.BuiltinExchangeType;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.ConfirmListener;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.MessageProperties;
+import com.sushobhit.taskqueue.common.ConnectionManager;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.sushobhit.taskqueue.message.TaskMessage;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.UUID;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.TimeoutException;
+
+public class Producer implements AutoCloseable {
+
+    private static final String EXCHANGE_NAME = "tasks_exchange";
+
+    private final Channel channel;
+
+    private final ConcurrentNavigableMap<Long, TaskMessage>
+            outstandingConfirms =
+            new ConcurrentSkipListMap<>();
+
+    private static final ObjectMapper objectMapper =
+            new ObjectMapper().registerModule(
+                    new JavaTimeModule());
+
+    public Producer() throws IOException, TimeoutException {
+
+        ConnectionManager.initialize();
+
+        Connection connection =
+                ConnectionManager.getConnection();
+
+        System.out.println(
+                "Producer obtained connection: "
+                        + connection);
+
+        try {
+
+            this.channel =
+                    connection.createChannel();
+
+            channel.confirmSelect();
+
+            channel.addConfirmListener(
+                    new ConfirmListener() {
+
+                        @Override
+                        public void handleAck(
+                                long deliveryTag,
+                                boolean multiple) {
+
+                            try {
+
+                                handleConfirmation(
+                                        deliveryTag,
+                                        multiple,
+                                        true);
+
+                            } catch (Throwable t) {
+
+                                System.err.println(
+                                        "Error while processing ACK: "
+                                                + t.getMessage());
+                            }
+                        }
+
+                        @Override
+                        public void handleNack(
+                                long deliveryTag,
+                                boolean multiple) {
+
+                            try {
+
+                                handleConfirmation(
+                                        deliveryTag,
+                                        multiple,
+                                        false);
+
+                            } catch (Throwable t) {
+
+                                System.err.println(
+                                        "Error while processing NACK: "
+                                                + t.getMessage());
+                            }
+                        }
+                    });
+
+            System.out.println(
+                    "Producer created channel: "
+                            + this.channel);
+
+            channel.exchangeDeclare(
+                    EXCHANGE_NAME,
+                    BuiltinExchangeType.DIRECT,
+                    true,
+                    false,
+                    null);
+
+            System.out.println(
+                    "Exchange declared successfully: "
+                            + EXCHANGE_NAME);
+
+        } catch (IOException e) {
+
+            System.err.println(
+                    "Failed to create RabbitMQ channel or declare exchange.");
+
+            throw new IOException(
+                    "Failed to create RabbitMQ channel or declare exchange.",
+                    e);
+        }
+
+        System.out.println(
+                "Producer ready for publishing.");
+    }
+
+    private void handleConfirmation(
+            long deliveryTag,
+            boolean multiple,
+            boolean isAck) {
+
+        String confirmationType =
+                isAck ? "ACK" : "NACK";
+
+        try {
+
+            ConcurrentNavigableMap<Long, TaskMessage>
+                    confirmedMessages;
+
+            if (multiple) {
+
+                confirmedMessages =
+                        outstandingConfirms.headMap(
+                                deliveryTag,
+                                true);
+
+            } else {
+
+                TaskMessage task =
+                        outstandingConfirms.get(
+                                deliveryTag);
+
+                if (task != null) {
+
+                    confirmedMessages =
+                            new ConcurrentSkipListMap<>(
+                                    Collections.singletonMap(
+                                            deliveryTag,
+                                            task));
+
+                } else {
+
+                    confirmedMessages =
+                            new ConcurrentSkipListMap<>();
+                }
+            }
+
+            if (confirmedMessages.isEmpty()
+                    && !multiple) {
+
+                System.err.println(
+                        confirmationType
+                                + " received for unknown deliveryTag: "
+                                + deliveryTag);
+
+                return;
+            }
+
+            for (Map.Entry<Long, TaskMessage> entry
+                    : confirmedMessages.entrySet()) {
+
+                Long currentTag =
+                        entry.getKey();
+
+                TaskMessage task =
+                        entry.getValue();
+
+                if (isAck) {
+
+                    System.out.println(
+                            "Broker ACK received. TaskId="
+                                    + task.getTaskId()
+                                    + ", DeliveryTag="
+                                    + currentTag);
+
+                } else {
+
+                    System.err.println(
+                            "Broker NACK received. TaskId="
+                                    + task.getTaskId()
+                                    + ", DeliveryTag="
+                                    + currentTag);
+                }
+            }
+
+            if (!confirmedMessages.isEmpty()) {
+
+                if (multiple) {
+
+                    confirmedMessages.clear();
+
+                } else {
+
+                    outstandingConfirms.remove(
+                            deliveryTag);
+                }
+            }
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "Error processing publisher confirmation: "
+                            + e.getMessage());
+        }
+    }
+
+    public void sendTask(TaskMessage task)
+            throws IOException {
+
+        if (this.channel == null
+                || !this.channel.isOpen()) {
+
+            throw new IOException(
+                    "Channel not available for publishing.");
+        }
+
+        if (task == null) {
+
+            throw new IllegalArgumentException(
+                    "TaskMessage cannot be null.");
+        }
+
+        if (task.getTaskType() == null
+                || task.getTaskType().trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    "Task type cannot be null or empty.");
+        }
+
+        if (task.getTaskId() == null) {
+
+            task.setTaskId(
+                    UUID.randomUUID());
+        }
+
+        String routingKey =
+                task.getTaskType();
+
+        byte[] messageBody;
+
+        try {
+
+            String jsonMessage =
+                    objectMapper.writeValueAsString(
+                            task);
+
+            messageBody =
+                    jsonMessage.getBytes(
+                            StandardCharsets.UTF_8);
+
+        } catch (Exception e) {
+
+            throw new IOException(
+                    "Failed to serialize task message.",
+                    e);
+        }
+
+        AMQP.BasicProperties properties =
+                MessageProperties.PERSISTENT_TEXT_PLAIN
+                        .builder()
+                        .contentType("application/json")
+                        .deliveryMode(2)
+                        .build();
+
+        long deliveryTag = -1;
+
+        try {
+
+            deliveryTag =
+                    channel.getNextPublishSeqNo();
+
+            outstandingConfirms.put(
+                    deliveryTag,
+                    task);
+
+            channel.basicPublish(
+                    EXCHANGE_NAME,
+                    routingKey,
+                    properties,
+                    messageBody
+            );
+
+            System.out.println(
+                    "Task published successfully. TaskId="
+                            + task.getTaskId()
+                            + ", DeliveryTag="
+                            + deliveryTag
+                            + ", RoutingKey="
+                            + routingKey);
+
+        } catch (IOException e) {
+
+            if (deliveryTag != -1) {
+
+                outstandingConfirms.remove(
+                        deliveryTag);
+            }
+
+            throw new IOException(
+                    "Error during message publishing.",
+                    e);
+        } catch (Exception e) {
+
+            if (deliveryTag != -1) {
+
+                outstandingConfirms.remove(
+                        deliveryTag);
+            }
+
+            throw new RuntimeException(
+                    "Unexpected error while publishing task.",
+                    e);
+        }
+    }
+
+    @Override
+    public void close()
+            throws IOException,
+            TimeoutException {
+
+        if (!outstandingConfirms.isEmpty()) {
+
+            System.err.println(
+                    "Closing producer with "
+                            + outstandingConfirms.size()
+                            + " unconfirmed messages.");
+
+            outstandingConfirms.clear();
+        }
+
+        if (this.channel != null
+                && this.channel.isOpen()) {
+
+            System.out.println(
+                    "Closing producer channel...");
+
+            this.channel.close();
+        }
+
+        System.out.println(
+                "Producer closed.");
+    }
+}
