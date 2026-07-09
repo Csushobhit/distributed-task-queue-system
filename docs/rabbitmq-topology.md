@@ -12,34 +12,6 @@
 
 ---
 
-## Task Message
-
-```java
-UUID taskId;
-String taskType;
-Map<String, Object> payload;
-Instant timestamp;
-int retryCount;
-```
-
----
-
-## Routing Strategy
-
-```text
-routingKey = taskType
-bindingKey = taskType
-```
-
-Examples:
-
-```text
-send_email   -> task_queue_email
-resize_image -> task_queue_image_processing
-```
-
----
-
 ## RabbitMQ Topology
 
 ```mermaid
