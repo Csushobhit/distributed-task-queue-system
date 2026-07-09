@@ -1,44 +1,18 @@
 # RabbitMQ Topology
 
-## Components
+## Core Components
 
-### VHost
-
-```text
-task_queue_vhost
-```
-
-### User
-
-```text
-task_user
-```
-
-### Main Exchange
-
-```text
-Name : tasks_exchange
-Type : Direct
-```
-
-### Dead Letter Exchange
-
-```text
-Name : tasks_dlx
-Type : Fanout
-```
-
-### Queues
-
-```text
-task_queue_email
-task_queue_image_processing
-tasks_dlq
-```
+| Component | Value |
+|------------|---------|
+| VHost | `task_queue_vhost` |
+| User | `task_user` |
+| Main Exchange | `tasks_exchange (Direct)` |
+| DLX | `tasks_dlx (Fanout)` |
+| DLQ | `tasks_dlq` |
 
 ---
 
-# Task Message
+## Task Message
 
 ```java
 UUID taskId;
@@ -50,7 +24,7 @@ int retryCount;
 
 ---
 
-# Routing Strategy
+## Routing Strategy
 
 ```text
 routingKey = taskType
@@ -61,76 +35,96 @@ Examples:
 
 ```text
 send_email   -> task_queue_email
-
 resize_image -> task_queue_image_processing
 ```
 
 ---
 
-# Topology Diagram
+## RabbitMQ Topology
 
-```text
-task_queue_vhost
+```mermaid
+flowchart LR
 
-├── tasks_exchange (Direct)
-│
-│   ├── send_email
-│   │        │
-│   │        ▼
-│   │   task_queue_email
-│   │
-│   └── resize_image
-│            │
-│            ▼
-│     task_queue_image_processing
-│
-├── tasks_dlx (Fanout)
-│
-└── tasks_dlq
+    P[Producer]
+
+    EX["tasks_exchange<br/>Direct Exchange"]
+
+    EMAIL["task_queue_email"]
+    IMAGE["task_queue_image_processing"]
+
+    EW[Email Worker]
+    IW[Image Worker]
+
+    P --> EX
+
+    EX -->|send_email| EMAIL
+    EX -->|resize_image| IMAGE
+
+    EMAIL --> EW
+    IMAGE --> IW
 ```
 
 ---
 
-# Normal Flow
+## Dead Letter Flow
 
-```text
-Producer
-   │
-   ▼
-tasks_exchange
-   │
-   ▼
-task_queue_*
-   │
-   ▼
-Worker
+```mermaid
+flowchart LR
+
+    EMAIL["task_queue_email"]
+    IMAGE["task_queue_image_processing"]
+
+    DLX["tasks_dlx<br/>Fanout Exchange"]
+    DLQ["tasks_dlq"]
+
+    EMAIL -. reject .-> DLX
+    IMAGE -. reject .-> DLX
+
+    DLX --> DLQ
 ```
 
 ---
 
-# Failure Flow
+## Complete Flow
 
-```text
-Worker
-   │
-   ▼
-Message Rejected
-   │
-   ▼
-tasks_dlx
-   │
-   ▼
-tasks_dlq
+```mermaid
+flowchart LR
+
+    P[Producer]
+
+    EX["tasks_exchange<br/>Direct"]
+
+    EMAIL["task_queue_email"]
+    IMAGE["task_queue_image_processing"]
+
+    EW[Email Worker]
+    IW[Image Worker]
+
+    DLX["tasks_dlx<br/>Fanout"]
+    DLQ["tasks_dlq"]
+
+    P --> EX
+
+    EX -->|send_email| EMAIL
+    EX -->|resize_image| IMAGE
+
+    EMAIL --> EW
+    IMAGE --> IW
+
+    EMAIL -. failed .-> DLX
+    IMAGE -. failed .-> DLX
+
+    DLX --> DLQ
 ```
 
 ---
 
-# Design Decisions
+## Design Decisions
 
-| Component | Choice | Reason |
-|------------|---------|---------|
-| Main Exchange | Direct | Route by task type |
-| DLX | Fanout | Send all failed messages to one place |
-| Multiple Queues | Yes | Independent scaling per task type |
-| DLQ | tasks_dlq | Store failed tasks |
-| VHost | task_queue_vhost | Resource isolation |
+| Choice | Reason |
+|----------|----------|
+| Direct Exchange | Exact routing by task type |
+| Multiple Queues | Independent scaling and isolation |
+| Fanout DLX | Route all failed messages to one place |
+| DLQ | Preserve failed tasks for investigation |
+| Dedicated VHost | Resource isolation |
