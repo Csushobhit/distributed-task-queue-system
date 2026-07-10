@@ -1,6 +1,9 @@
 package com.sushobhit.taskqueue.consumer;
 
 import com.rabbitmq.client.Channel;
+
+import com.sushobhit.taskqueue.consumer.processor.TaskProcessor;
+import com.sushobhit.taskqueue.consumer.processor.TaskProcessorFactory;
 import com.rabbitmq.client.Connection;
 import com.sushobhit.taskqueue.common.ConnectionManager;
 
@@ -34,6 +37,8 @@ public class Consumer implements Runnable, AutoCloseable {
 
     private String consumerTag;
     
+   
+    
     private static final String DLQ_NAME =
             "tasks_dlq";
     
@@ -50,6 +55,7 @@ public class Consumer implements Runnable, AutoCloseable {
             new ObjectMapper()
                     .registerModule(
                             new JavaTimeModule());
+    
     
 private class TaskMessageHandler extends DefaultConsumer {
 
@@ -94,6 +100,9 @@ public void handleDelivery(
                     + routingKey);
 
     TaskMessage taskMessage = null;
+    String taskType = null;
+    TaskProcessor processor = null;
+    boolean processingSuccessful = false;
 
     String messageContent =
             "(unable to decode)";
@@ -114,8 +123,41 @@ public void handleDelivery(
                 "TaskMessage received: "
                         + taskMessage);
 
+        taskType =
+                taskMessage.getTaskType();
+
+        if (taskType == null
+                || taskType.trim().isEmpty()) {
+
+            System.err.println(
+                    "Task type is missing or empty.");
+
+            return;
+        }
+
         System.out.println(
-                "Placeholder: Task processing pending.");
+                "Task type determined: "
+                        + taskType);
+
+        try {
+
+            processor =
+                    TaskProcessorFactory.getProcessor(
+                            taskType);
+
+            System.out.println(
+                    "Processor selected: "
+                            + processor.getClass()
+                            .getSimpleName());
+
+        } catch (IllegalArgumentException e) {
+
+            System.err.println(
+                    "No processor found for task type: "
+                            + taskType);
+
+            return;
+        }
 
     } catch (JsonProcessingException e) {
 
@@ -135,6 +177,46 @@ public void handleDelivery(
 
         e.printStackTrace();
     }
+    if (taskMessage != null
+            && processor != null) {
+
+        try {
+
+            System.out.println(
+                    "Executing processor: "
+                            + processor.getClass()
+                            .getSimpleName());
+
+            processor.process(
+                    taskMessage);
+
+            processingSuccessful = true;
+
+            System.out.println(
+                    "Processor completed successfully. TaskId="
+                            + taskMessage.getTaskId());
+
+        } catch (Exception e) {
+
+            processingSuccessful = false;
+
+            System.err.println(
+                    "Processor execution failed. TaskId="
+                            + taskMessage.getTaskId());
+
+            e.printStackTrace();
+        }
+
+    } else {
+
+        processingSuccessful = false;
+
+        System.err.println(
+                "Skipping task processing due to previous errors.");
+    }
+    System.out.println(
+            "Message processing completed. Success="
+                    + processingSuccessful);
 }
 
 @Override
