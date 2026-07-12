@@ -21,6 +21,7 @@ import java.util.Map;
 
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.MessageProperties;
 import com.rabbitmq.client.ShutdownSignalException;
 
 import java.io.IOException;
@@ -37,6 +38,11 @@ public class Consumer implements Runnable, AutoCloseable {
 
     private String consumerTag;
     
+    private static final int MAX_RETRIES = 3;
+    
+    private static final long BASE_DELAY_MILLIS = 1000;
+
+    private static final long MAX_DELAY_MILLIS = 30000;
    
     
     private static final String DLQ_NAME =
@@ -92,6 +98,8 @@ public void handleDelivery(
 
     String routingKey =
             envelope.getRoutingKey();
+    String originalRoutingKey =
+            routingKey;
 
     System.out.println(
             "Received message. DeliveryTag="
@@ -214,9 +222,208 @@ public void handleDelivery(
         System.err.println(
                 "Skipping task processing due to previous errors.");
     }
+    if (taskMessage == null) {
+
+        try {
+
+            System.err.println(
+                    "Message cannot be processed or retried. Sending to DLQ. DeliveryTag="
+                            + deliveryTag);
+
+            this.getChannel().basicNack(
+                    deliveryTag,
+                    false,
+                    false);
+
+            System.out.println(
+                    "basicNack sent successfully. Message routed to DLQ.");
+
+            return;
+
+        } catch (IOException e) {
+
+            System.err.println(
+                    "Failed to send basicNack. DeliveryTag="
+                            + deliveryTag);
+
+            e.printStackTrace();
+
+            return;
+        }
+    }
     System.out.println(
             "Message processing completed. Success="
                     + processingSuccessful);
+    
+    try {
+
+        if (processingSuccessful) {
+
+            System.out.println(
+                    "Task processing successful. Sending ACK. DeliveryTag="
+                            + deliveryTag);
+
+            this.getChannel().basicAck(
+                    deliveryTag,
+                    false);
+
+            System.out.println(
+                    "ACK sent successfully. DeliveryTag="
+                            + deliveryTag);
+
+        } else {
+
+        	if (taskMessage != null
+        	        && taskMessage.getRetryCount()
+        	        < MAX_RETRIES) {
+
+        	    int nextRetryCount =
+        	            taskMessage.getRetryCount() + 1;
+
+        	    taskMessage.setRetryCount(
+        	            nextRetryCount);
+
+        	    System.out.println(
+        	            "Retry attempt "
+        	                    + nextRetryCount
+        	                    + " of "
+        	                    + MAX_RETRIES
+        	                    + " for TaskId="
+        	                    + taskMessage.getTaskId());
+
+        	    long exponentialDelay =
+        	            BASE_DELAY_MILLIS
+        	                    * (long) Math.pow(
+        	                    2,
+        	                    taskMessage.getRetryCount() - 1);
+
+        	    long jitter =
+        	            (long) (
+        	                    (Math.random() - 0.5)
+        	                            * BASE_DELAY_MILLIS
+        	                            * 0.4);
+
+        	    long calculatedDelay =
+        	            Math.min(
+        	                    exponentialDelay + jitter,
+        	                    MAX_DELAY_MILLIS);
+
+        	    calculatedDelay =
+        	            Math.max(
+        	                    0,
+        	                    calculatedDelay);
+
+        	    System.out.println(
+        	            "Waiting "
+        	                    + calculatedDelay
+        	                    + " ms before retry.");
+
+        	    try {
+
+        	        Thread.sleep(
+        	                calculatedDelay);
+
+        	    } catch (InterruptedException e) {
+
+        	        Thread.currentThread()
+        	                .interrupt();
+
+        	        System.err.println(
+        	                "Retry delay interrupted. Sending message to DLQ.");
+
+        	        this.getChannel().basicNack(
+        	                deliveryTag,
+        	                false,
+        	                false);
+
+        	        return;
+        	    }
+
+        	    Channel publishChannel = null;
+
+        	    try {
+
+        	        publishChannel =
+        	                ConnectionManager
+        	                        .getConnection()
+        	                        .createChannel();
+
+        	        byte[] retryBody =
+        	                objectMapper.writeValueAsBytes(
+        	                        taskMessage);
+
+        	        AMQP.BasicProperties retryProperties =
+        	                MessageProperties
+        	                        .PERSISTENT_TEXT_PLAIN
+        	                        .builder()
+        	                        .contentType(
+        	                                "application/json")
+        	                        .deliveryMode(2)
+        	                        .build();
+
+        	        publishChannel.basicPublish(
+        	                EXCHANGE_NAME,
+        	                originalRoutingKey,
+        	                retryProperties,
+        	                retryBody);
+
+        	        this.getChannel().basicAck(
+        	                deliveryTag,
+        	                false);
+
+        	        System.out.println(
+        	                "Task republished successfully. Original message ACKed.");
+
+        	    } catch (IOException | TimeoutException e) {
+
+        	        System.err.println(
+        	                "Failed to republish retry message.");
+
+        	        e.printStackTrace();
+
+        	    } finally {
+
+        	        if (publishChannel != null
+        	                && publishChannel.isOpen()) {
+
+        	            try {
+
+        	                publishChannel.close();
+
+        	            } catch (Exception e) {
+
+        	                System.err.println(
+        	                        "Failed to close retry publish channel.");
+
+        	                e.printStackTrace();
+        	            }
+        	        }
+        	    }
+
+        	} else {
+
+        	    System.err.println(
+        	            "Maximum retry limit reached. Sending message to DLQ. DeliveryTag="
+        	                    + deliveryTag);
+
+        	    this.getChannel().basicNack(
+        	            deliveryTag,
+        	            false,
+        	            false);
+
+        	    System.out.println(
+        	            "basicNack sent successfully. Message routed to DLQ.");
+        	}
+        }
+
+    } catch (IOException e) {
+
+        System.err.println(
+                "Failed to send ACK. DeliveryTag="
+                        + deliveryTag);
+
+        e.printStackTrace();
+    }
 }
 
 @Override
@@ -348,6 +555,7 @@ public void handleShutdownSignal(
         String routingKey =
                 deriveRoutingKeyFromQueue(
                         this.queueName);
+        
 
         if (routingKey == null) {
 

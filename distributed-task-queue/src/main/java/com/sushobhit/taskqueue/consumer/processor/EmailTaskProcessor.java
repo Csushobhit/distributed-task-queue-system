@@ -39,6 +39,32 @@ public class EmailTaskProcessor implements TaskProcessor {
                     String.valueOf(
                             payload.get("body"));
 
+            if (recipient == null
+                    || recipient.isBlank()
+                    || "null".equalsIgnoreCase(recipient)
+                    || !recipient.contains("@")) {
+
+                throw new IllegalArgumentException(
+                        "Invalid recipient email: "
+                                + recipient);
+            }
+
+            if (subject == null
+                    || subject.isBlank()
+                    || "null".equalsIgnoreCase(subject)) {
+
+                throw new IllegalArgumentException(
+                        "Email subject cannot be empty.");
+            }
+
+            if (body == null
+                    || body.isBlank()
+                    || "null".equalsIgnoreCase(body)) {
+
+                throw new IllegalArgumentException(
+                        "Email body cannot be empty.");
+            }
+
             System.out.println(
                     "Processing email task. TaskId="
                             + task.getTaskId());

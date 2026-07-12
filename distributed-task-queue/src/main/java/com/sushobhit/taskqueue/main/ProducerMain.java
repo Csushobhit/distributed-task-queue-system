@@ -22,7 +22,7 @@ public class ProducerMain {
             emailTask.setTaskType("send_email");
             emailTask.setPayload(
                     Map.of(
-                            "recipient", "test@example.com",
+                            "recipient", "test@user.com",
                             "subject", "Welcome",
                             "body", "Hello from RabbitMQ Producer"
                     )
