@@ -624,7 +624,8 @@ public void handleShutdownSignal(
                         this.channel);
 
         try {
-
+        	channel.basicQos(1);
+        	System.out.println("Prefetch count set to 1.");
             channel.basicConsume(
                     this.queueName,
                     false,
