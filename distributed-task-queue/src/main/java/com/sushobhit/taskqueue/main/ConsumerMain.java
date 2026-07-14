@@ -2,15 +2,21 @@ package com.sushobhit.taskqueue.main;
 
 import com.sushobhit.taskqueue.common.ConnectionManager;
 import com.sushobhit.taskqueue.consumer.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ConsumerMain {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    ConsumerMain.class);
 
     private static final String QUEUE_NAME =
             "task_queue_email";
 
     public static void main(String[] args) {
 
-        System.out.println(
+        LOGGER.info(
                 "Starting Consumer Application...");
 
         Consumer consumer = null;
@@ -31,9 +37,9 @@ public class ConsumerMain {
 
             consumerThread.start();
 
-            System.out.println(
-                    "Consumer thread started for queue: "
-                            + QUEUE_NAME);
+            LOGGER.info(
+                    "Consumer thread started for queue: {}",
+                    QUEUE_NAME);
 
             Consumer finalConsumer =
                     consumer;
@@ -42,7 +48,7 @@ public class ConsumerMain {
                     .addShutdownHook(
                             new Thread(() -> {
 
-                                System.out.println(
+                                LOGGER.info(
                                         "Shutdown hook triggered.");
 
                                 try {
@@ -54,26 +60,25 @@ public class ConsumerMain {
 
                                 } catch (Exception e) {
 
-                                    System.err.println(
-                                            "Error while closing consumer: "
-                                                    + e.getMessage());
+                                    LOGGER.error(
+                                            "Error while closing consumer.",
+                                            e);
                                 }
 
                                 ConnectionManager.closeConnection();
 
-                                System.out.println(
+                                LOGGER.info(
                                         "Consumer application shutdown complete.");
                             }));
 
-            System.out.println(
+            LOGGER.info(
                     "Consumer is waiting for messages...");
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Failed to start consumer application.");
-
-            e.printStackTrace();
+            LOGGER.error(
+                    "Failed to start consumer application.",
+                    e);
 
             ConnectionManager.closeConnection();
         }

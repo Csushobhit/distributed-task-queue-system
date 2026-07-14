@@ -22,7 +22,13 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class Producer implements AutoCloseable {
+	
+	private static final Logger LOGGER =
+	        LoggerFactory.getLogger(Producer.class);
 
     private static final String EXCHANGE_NAME = "tasks_exchange";
 
@@ -43,7 +49,7 @@ public class Producer implements AutoCloseable {
         Connection connection =
                 ConnectionManager.getConnection();
 
-        System.out.println(
+        LOGGER.info(
                 "Producer obtained connection: "
                         + connection);
 
@@ -71,7 +77,7 @@ public class Producer implements AutoCloseable {
 
                             } catch (Throwable t) {
 
-                                System.err.println(
+                            	LOGGER.error(
                                         "Error while processing ACK: "
                                                 + t.getMessage());
                             }
@@ -91,14 +97,14 @@ public class Producer implements AutoCloseable {
 
                             } catch (Throwable t) {
 
-                                System.err.println(
+                            	LOGGER.error(
                                         "Error while processing NACK: "
                                                 + t.getMessage());
                             }
                         }
                     });
 
-            System.out.println(
+            LOGGER.info(
                     "Producer created channel: "
                             + this.channel);
 
@@ -109,13 +115,13 @@ public class Producer implements AutoCloseable {
                     false,
                     null);
 
-            System.out.println(
+            LOGGER.info(
                     "Exchange declared successfully: "
                             + EXCHANGE_NAME);
 
         } catch (IOException e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Failed to create RabbitMQ channel or declare exchange.");
 
             throw new IOException(
@@ -123,7 +129,7 @@ public class Producer implements AutoCloseable {
                     e);
         }
 
-        System.out.println(
+        LOGGER.info(
                 "Producer ready for publishing.");
     }
 
@@ -171,7 +177,7 @@ public class Producer implements AutoCloseable {
             if (confirmedMessages.isEmpty()
                     && !multiple) {
 
-                System.err.println(
+            	LOGGER.error(
                         confirmationType
                                 + " received for unknown deliveryTag: "
                                 + deliveryTag);
@@ -190,7 +196,7 @@ public class Producer implements AutoCloseable {
 
                 if (isAck) {
 
-                    System.out.println(
+                	LOGGER.info(
                             "Broker ACK received. TaskId="
                                     + task.getTaskId()
                                     + ", DeliveryTag="
@@ -198,7 +204,7 @@ public class Producer implements AutoCloseable {
 
                 } else {
 
-                    System.err.println(
+                	LOGGER.error(
                             "Broker NACK received. TaskId="
                                     + task.getTaskId()
                                     + ", DeliveryTag="
@@ -221,7 +227,7 @@ public class Producer implements AutoCloseable {
 
         } catch (Exception e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Error processing publisher confirmation: "
                             + e.getMessage());
         }
@@ -303,7 +309,7 @@ public class Producer implements AutoCloseable {
                     messageBody
             );
 
-            System.out.println(
+            LOGGER.info(
                     "Task published successfully. TaskId="
                             + task.getTaskId()
                             + ", DeliveryTag="
@@ -343,7 +349,7 @@ public class Producer implements AutoCloseable {
 
         if (!outstandingConfirms.isEmpty()) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Closing producer with "
                             + outstandingConfirms.size()
                             + " unconfirmed messages.");
@@ -354,13 +360,13 @@ public class Producer implements AutoCloseable {
         if (this.channel != null
                 && this.channel.isOpen()) {
 
-            System.out.println(
+        	LOGGER.info(
                     "Closing producer channel...");
 
             this.channel.close();
         }
 
-        System.out.println(
+        LOGGER.info(
                 "Producer closed.");
     }
 }

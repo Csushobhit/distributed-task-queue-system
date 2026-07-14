@@ -3,9 +3,10 @@ package com.sushobhit.taskqueue.dlq;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.rabbitmq.client.*;
-
 import com.sushobhit.taskqueue.common.ConnectionManager;
 import com.sushobhit.taskqueue.message.TaskMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -14,6 +15,10 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 public class DlqConsumer implements AutoCloseable {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    DlqConsumer.class);
 
     private static final String DLQ_NAME =
             "tasks_dlq";
@@ -39,7 +44,7 @@ public class DlqConsumer implements AutoCloseable {
         this.channel =
                 connection.createChannel();
 
-        System.out.println(
+        LOGGER.info(
                 "DLQ Consumer created.");
     }
 
@@ -54,12 +59,12 @@ public class DlqConsumer implements AutoCloseable {
                         DLQ_NAME,
                         false,
                         this::handleDelivery,
-                        consumerTag -> System.out.println(
-                                "DLQ Consumer cancelled: "
-                                        + consumerTag)
+                        consumerTag -> LOGGER.info(
+                                "DLQ Consumer cancelled: {}",
+                                consumerTag)
                 );
 
-        System.out.println(
+        LOGGER.info(
                 "DLQ Consumer started.");
     }
 
@@ -80,17 +85,18 @@ public class DlqConsumer implements AutoCloseable {
                         body,
                         StandardCharsets.UTF_8);
 
-        System.out.println(
-                "\n================ DLQ MESSAGE ================");
+        LOGGER.info(
+                "================ DLQ MESSAGE ================");
 
-        System.out.println(
-                "DeliveryTag: "
-                        + deliveryTag);
+        LOGGER.info(
+                "DeliveryTag: {}",
+                deliveryTag);
 
-        System.out.println(
+        LOGGER.info(
                 "Message Content:");
 
-        System.out.println(
+        LOGGER.info(
+                "{}",
                 messageContent);
 
         try {
@@ -100,16 +106,18 @@ public class DlqConsumer implements AutoCloseable {
                             messageContent,
                             TaskMessage.class);
 
-            System.out.println(
+            LOGGER.info(
                     "Deserialized Message:");
 
-            System.out.println(
+            LOGGER.info(
+                    "{}",
                     taskMessage);
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Failed to deserialize DLQ message.");
+            LOGGER.error(
+                    "Failed to deserialize DLQ message.",
+                    e);
         }
 
         logXDeathHeaders(
@@ -120,11 +128,11 @@ public class DlqConsumer implements AutoCloseable {
                 deliveryTag,
                 false);
 
-        System.out.println(
+        LOGGER.info(
                 "DLQ message acknowledged.");
 
-        System.out.println(
-                "=============================================\n");
+        LOGGER.info(
+                "=============================================");
     }
 
     @SuppressWarnings("unchecked")
@@ -139,7 +147,7 @@ public class DlqConsumer implements AutoCloseable {
                 || !headers.containsKey(
                 "x-death")) {
 
-            System.out.println(
+            LOGGER.info(
                     "No x-death header found.");
 
             return;
@@ -155,7 +163,7 @@ public class DlqConsumer implements AutoCloseable {
             if (xDeath == null
                     || xDeath.isEmpty()) {
 
-                System.out.println(
+                LOGGER.info(
                         "x-death header empty.");
 
                 return;
@@ -165,40 +173,39 @@ public class DlqConsumer implements AutoCloseable {
                     xDeath.get(
                             0);
 
-            System.out.println(
+            LOGGER.info(
                     "Dead Letter Details:");
 
-            System.out.println(
-                    "Reason: "
-                            + deathEntry.get(
+            LOGGER.info(
+                    "Reason: {}",
+                    deathEntry.get(
                             "reason"));
 
-            System.out.println(
-                    "Count: "
-                            + deathEntry.get(
+            LOGGER.info(
+                    "Count: {}",
+                    deathEntry.get(
                             "count"));
 
-            System.out.println(
-                    "Queue: "
-                            + deathEntry.get(
+            LOGGER.info(
+                    "Queue: {}",
+                    deathEntry.get(
                             "queue"));
 
-            System.out.println(
-                    "Exchange: "
-                            + deathEntry.get(
+            LOGGER.info(
+                    "Exchange: {}",
+                    deathEntry.get(
                             "exchange"));
 
-            System.out.println(
-                    "Routing Keys: "
-                            + deathEntry.get(
+            LOGGER.info(
+                    "Routing Keys: {}",
+                    deathEntry.get(
                             "routing-keys"));
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Failed to parse x-death header.");
-
-            e.printStackTrace();
+            LOGGER.error(
+                    "Failed to parse x-death header.",
+                    e);
         }
     }
 
@@ -221,10 +228,9 @@ public class DlqConsumer implements AutoCloseable {
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Failed to close DLQ consumer.");
-
-            e.printStackTrace();
+            LOGGER.error(
+                    "Failed to close DLQ consumer.",
+                    e);
         }
     }
 }

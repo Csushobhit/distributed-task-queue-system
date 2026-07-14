@@ -28,10 +28,18 @@ import java.io.IOException;
 import com.sushobhit.taskqueue.message.TaskMessage;
 import java.util.concurrent.TimeoutException;
 
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
 public class Consumer implements Runnable, AutoCloseable {
 
     private final String queueName;
-
+    
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(Consumer.class);
+    
     private Connection connection;
 
     private Channel channel;
@@ -78,7 +86,7 @@ public void handleConsumeOk(
     Consumer.this.consumerTag =
             consumerTag;
 
-    System.out.println(
+    LOGGER.info(
             "Consumer registered successfully. Queue="
                     + Consumer.this.queueName
                     + ", ConsumerTag="
@@ -101,7 +109,7 @@ public void handleDelivery(
     String originalRoutingKey =
             routingKey;
 
-    System.out.println(
+    LOGGER.info(
             "Received message. DeliveryTag="
                     + deliveryTag
                     + ", RoutingKey="
@@ -127,7 +135,7 @@ public void handleDelivery(
                         messageContent,
                         TaskMessage.class);
 
-        System.out.println(
+        LOGGER.info(
                 "TaskMessage received: "
                         + taskMessage);
 
@@ -137,13 +145,13 @@ public void handleDelivery(
         if (taskType == null
                 || taskType.trim().isEmpty()) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Task type is missing or empty.");
 
             return;
         }
 
-        System.out.println(
+        LOGGER.info(
                 "Task type determined: "
                         + taskType);
 
@@ -153,14 +161,14 @@ public void handleDelivery(
                     TaskProcessorFactory.getProcessor(
                             taskType);
 
-            System.out.println(
+            LOGGER.info(
                     "Processor selected: "
                             + processor.getClass()
                             .getSimpleName());
 
         } catch (IllegalArgumentException e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "No processor found for task type: "
                             + taskType);
 
@@ -169,10 +177,10 @@ public void handleDelivery(
 
     } catch (JsonProcessingException e) {
 
-        System.err.println(
+    	LOGGER.error(
                 "Failed to deserialize TaskMessage.");
 
-        System.err.println(
+    	LOGGER.error(
                 "Message Content: "
                         + messageContent);
 
@@ -180,7 +188,7 @@ public void handleDelivery(
 
     } catch (Exception e) {
 
-        System.err.println(
+    	LOGGER.error(
                 "Unexpected error while processing message.");
 
         e.printStackTrace();
@@ -190,7 +198,7 @@ public void handleDelivery(
 
         try {
 
-            System.out.println(
+        	LOGGER.info(
                     "Executing processor: "
                             + processor.getClass()
                             .getSimpleName());
@@ -200,7 +208,7 @@ public void handleDelivery(
 
             processingSuccessful = true;
 
-            System.out.println(
+            LOGGER.info(
                     "Processor completed successfully. TaskId="
                             + taskMessage.getTaskId());
 
@@ -208,7 +216,7 @@ public void handleDelivery(
 
             processingSuccessful = false;
 
-            System.err.println(
+            LOGGER.error(
                     "Processor execution failed. TaskId="
                             + taskMessage.getTaskId());
 
@@ -219,14 +227,14 @@ public void handleDelivery(
 
         processingSuccessful = false;
 
-        System.err.println(
+        LOGGER.error(
                 "Skipping task processing due to previous errors.");
     }
     if (taskMessage == null) {
 
         try {
 
-            System.err.println(
+        	LOGGER.error(
                     "Message cannot be processed or retried. Sending to DLQ. DeliveryTag="
                             + deliveryTag);
 
@@ -235,14 +243,14 @@ public void handleDelivery(
                     false,
                     false);
 
-            System.out.println(
+            LOGGER.info(
                     "basicNack sent successfully. Message routed to DLQ.");
 
             return;
 
         } catch (IOException e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Failed to send basicNack. DeliveryTag="
                             + deliveryTag);
 
@@ -251,7 +259,7 @@ public void handleDelivery(
             return;
         }
     }
-    System.out.println(
+    LOGGER.info(
             "Message processing completed. Success="
                     + processingSuccessful);
     
@@ -259,7 +267,7 @@ public void handleDelivery(
 
         if (processingSuccessful) {
 
-            System.out.println(
+        	LOGGER.info(
                     "Task processing successful. Sending ACK. DeliveryTag="
                             + deliveryTag);
 
@@ -267,7 +275,7 @@ public void handleDelivery(
                     deliveryTag,
                     false);
 
-            System.out.println(
+            LOGGER.info(
                     "ACK sent successfully. DeliveryTag="
                             + deliveryTag);
 
@@ -283,7 +291,7 @@ public void handleDelivery(
         	    taskMessage.setRetryCount(
         	            nextRetryCount);
 
-        	    System.out.println(
+        	    LOGGER.info(
         	            "Retry attempt "
         	                    + nextRetryCount
         	                    + " of "
@@ -313,7 +321,7 @@ public void handleDelivery(
         	                    0,
         	                    calculatedDelay);
 
-        	    System.out.println(
+        	    LOGGER.info(
         	            "Waiting "
         	                    + calculatedDelay
         	                    + " ms before retry.");
@@ -328,7 +336,7 @@ public void handleDelivery(
         	        Thread.currentThread()
         	                .interrupt();
 
-        	        System.err.println(
+        	        LOGGER.error(
         	                "Retry delay interrupted. Sending message to DLQ.");
 
         	        this.getChannel().basicNack(
@@ -371,12 +379,12 @@ public void handleDelivery(
         	                deliveryTag,
         	                false);
 
-        	        System.out.println(
+        	        LOGGER.info(
         	                "Task republished successfully. Original message ACKed.");
 
         	    } catch (IOException | TimeoutException e) {
 
-        	        System.err.println(
+        	    	LOGGER.error(
         	                "Failed to republish retry message.");
 
         	        e.printStackTrace();
@@ -392,7 +400,7 @@ public void handleDelivery(
 
         	            } catch (Exception e) {
 
-        	                System.err.println(
+        	            	LOGGER.error(
         	                        "Failed to close retry publish channel.");
 
         	                e.printStackTrace();
@@ -402,7 +410,7 @@ public void handleDelivery(
 
         	} else {
 
-        	    System.err.println(
+        		LOGGER.error(
         	            "Maximum retry limit reached. Sending message to DLQ. DeliveryTag="
         	                    + deliveryTag);
 
@@ -411,14 +419,14 @@ public void handleDelivery(
         	            false,
         	            false);
 
-        	    System.out.println(
+        	    LOGGER.info(
         	            "basicNack sent successfully. Message routed to DLQ.");
         	}
         }
 
     } catch (IOException e) {
 
-        System.err.println(
+    	LOGGER.error(
                 "Failed to send ACK. DeliveryTag="
                         + deliveryTag);
 
@@ -433,13 +441,13 @@ public void handleShutdownSignal(
 
     if (!sig.isInitiatedByApplication()) {
 
-        System.err.println(
+    	LOGGER.error(
                 "Consumer shutdown unexpectedly: "
                         + sig.getMessage());
 
     } else {
 
-        System.out.println(
+    	LOGGER.info(
                 "Consumer shutdown by application.");
     }
 }
@@ -457,7 +465,7 @@ public void handleShutdownSignal(
 
         this.queueName = queueName;
 
-        System.out.println(
+        LOGGER.info(
                 "Initializing Consumer for queue: "
                         + this.queueName);
     }
@@ -470,14 +478,14 @@ public void handleShutdownSignal(
         this.connection =
                 ConnectionManager.getConnection();
 
-        System.out.println(
+        LOGGER.info(
                 "Consumer obtained connection: "
                         + this.connection);
 
         this.channel =
                 this.connection.createChannel();
 
-        System.out.println(
+        LOGGER.info(
                 "Consumer created channel: "
                         + this.channel);
 
@@ -485,13 +493,13 @@ public void handleShutdownSignal(
 
             if (!reason.isInitiatedByApplication()) {
 
-                System.err.println(
+            	LOGGER.error(
                         "Consumer channel closed unexpectedly: "
                                 + reason.getMessage());
 
             } else {
 
-                System.out.println(
+            	LOGGER.info(
                         "Consumer channel closed by application.");
             }
         });
@@ -500,7 +508,7 @@ public void handleShutdownSignal(
     public void initializeAndStart()
             throws IOException, TimeoutException {
 
-        System.out.println(
+    	LOGGER.info(
                 "Consumer initialization started for queue: "
                         + this.queueName);
 
@@ -578,7 +586,7 @@ public void handleShutdownSignal(
                         null
                 );
 
-        System.out.println(
+        LOGGER.info(
                 "Dead-letter queue declared: "
                         + deadLetterQueue.getQueue());
 
@@ -588,19 +596,19 @@ public void handleShutdownSignal(
                 "#"
         );
 
-        System.out.println(
+        LOGGER.info(
                 "Dead-letter queue bound successfully. DLQ="
                         + DLQ_NAME
                         + ", DLX="
                         + DLX_NAME);
 
-        System.out.println(
+        LOGGER.info(
                 "Queue bound successfully. Queue="
                         + this.queueName
                         + ", RoutingKey="
                         + routingKey);
 
-        System.out.println(
+        LOGGER.info(
                 "Queue declared successfully: "
                         + declareOk.getQueue());
     }
@@ -615,7 +623,7 @@ public void handleShutdownSignal(
                     "Cannot start consuming: Channel is not available.");
         }
 
-        System.out.println(
+        LOGGER.info(
                 "Starting consumer on queue: "
                         + this.queueName);
 
@@ -625,7 +633,7 @@ public void handleShutdownSignal(
 
         try {
         	channel.basicQos(1);
-        	System.out.println("Prefetch count set to 1.");
+        	LOGGER.info("Prefetch count set to 1.");
             channel.basicConsume(
                     this.queueName,
                     false,
@@ -633,13 +641,13 @@ public void handleShutdownSignal(
                     messageHandler
             );
 
-            System.out.println(
+            LOGGER.info(
                     "basicConsume registered successfully for queue: "
                             + this.queueName);
 
         } catch (IOException e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Failed to start consumer for queue: "
                             + this.queueName);
 
@@ -664,7 +672,7 @@ public void handleShutdownSignal(
                  | TimeoutException
                  | InterruptedException e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Consumer error: "
                             + e.getMessage());
 
@@ -691,7 +699,7 @@ public void handleShutdownSignal(
 
         } catch (Exception e) {
 
-            System.err.println(
+        	LOGGER.error(
                     "Error closing consumer: "
                             + e.getMessage());
         } finally {

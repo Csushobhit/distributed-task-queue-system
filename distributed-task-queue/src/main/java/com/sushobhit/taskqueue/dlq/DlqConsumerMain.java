@@ -1,8 +1,14 @@
 package com.sushobhit.taskqueue.dlq;
 
 import com.sushobhit.taskqueue.common.ConnectionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DlqConsumerMain {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    DlqConsumerMain.class);
 
     public static void main(
             String[] args) {
@@ -16,7 +22,7 @@ public class DlqConsumerMain {
                     .addShutdownHook(
                             new Thread(() -> {
 
-                                System.out.println(
+                                LOGGER.info(
                                         "Shutting down DLQ Consumer...");
 
                                 dlqConsumer.close();
@@ -26,7 +32,7 @@ public class DlqConsumerMain {
 
             dlqConsumer.start();
 
-            System.out.println(
+            LOGGER.info(
                     "DLQ Consumer is running...");
 
             while (true) {
@@ -37,10 +43,9 @@ public class DlqConsumerMain {
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Failed to start DLQ Consumer.");
-
-            e.printStackTrace();
+            LOGGER.error(
+                    "Failed to start DLQ Consumer.",
+                    e);
         }
     }
 }

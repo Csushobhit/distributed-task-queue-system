@@ -3,6 +3,8 @@ package com.sushobhit.taskqueue.main;
 import com.sushobhit.taskqueue.common.ConnectionManager;
 import com.sushobhit.taskqueue.message.TaskMessage;
 import com.sushobhit.taskqueue.producer.Producer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Map;
@@ -10,9 +12,14 @@ import java.util.UUID;
 
 public class ProducerMain {
 
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    ProducerMain.class);
+
     public static void main(String[] args) {
 
-        System.out.println("Starting Producer Application...");
+        LOGGER.info(
+                "Starting Producer Application...");
 
         try (Producer producer = new Producer()) {
 
@@ -46,32 +53,26 @@ public class ProducerMain {
 
             producer.sendTask(imageTask);
 
-            System.out.println(
-                    "Tasks submitted. Waiting for publisher confirms..."
-            );
+            LOGGER.info(
+                    "Tasks submitted. Waiting for publisher confirms...");
 
             Thread.sleep(5000);
 
-            System.out.println(
-                    "Finished waiting for publisher confirms."
-            );
+            LOGGER.info(
+                    "Finished waiting for publisher confirms.");
 
         } catch (Exception e) {
 
-            System.err.println(
-                    "Producer application failed: "
-                            + e.getMessage()
-            );
-
-            e.printStackTrace();
+            LOGGER.error(
+                    "Producer application failed.",
+                    e);
 
         } finally {
 
             ConnectionManager.closeConnection();
         }
 
-        System.out.println(
-                "Producer Application Finished."
-        );
+        LOGGER.info(
+                "Producer Application Finished.");
     }
 }

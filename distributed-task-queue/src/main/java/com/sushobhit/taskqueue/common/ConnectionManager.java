@@ -8,7 +8,13 @@ import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ConnectionManager implements AutoCloseable {
+	
+	private static final Logger LOGGER =
+	        LoggerFactory.getLogger(ConnectionManager.class);
 
     private static final AtomicReference<Connection> connection =
             new AtomicReference<>(null);
@@ -23,7 +29,7 @@ public class ConnectionManager implements AutoCloseable {
 
             factory.setAutomaticRecoveryEnabled(true);
 
-            System.out.println(
+            LOGGER.info(
                     "ConnectionManager initialized. Automatic recovery enabled.");
         }
     }
@@ -48,7 +54,7 @@ public class ConnectionManager implements AutoCloseable {
                 if (currentConnection == null
                         || !currentConnection.isOpen()) {
 
-                    System.out.println(
+                	LOGGER.info(
                             "Creating new RabbitMQ connection...");
 
                     try {
@@ -57,7 +63,7 @@ public class ConnectionManager implements AutoCloseable {
 
                         connection.set(currentConnection);
 
-                        System.out.println(
+                        LOGGER.info(
                                 "RabbitMQ connection established.");
 
                         final Connection listenerConnection = currentConnection;
@@ -66,7 +72,7 @@ public class ConnectionManager implements AutoCloseable {
 
                             if (!reason.isInitiatedByApplication()) {
 
-                                System.err.println(
+                            	LOGGER.error(
                                         "RabbitMQ connection closed unexpectedly: "
                                                 + reason.getMessage());
 
@@ -76,7 +82,7 @@ public class ConnectionManager implements AutoCloseable {
 
                             } else {
 
-                                System.out.println(
+                            	LOGGER.info(
                                         "RabbitMQ connection closed by application.");
                             }
                         });
@@ -85,7 +91,7 @@ public class ConnectionManager implements AutoCloseable {
 
                         connection.set(null);
 
-                        System.err.println(
+                        LOGGER.error(
                                 "Failed to establish RabbitMQ connection.");
 
                         throw e;
@@ -112,14 +118,14 @@ public class ConnectionManager implements AutoCloseable {
 
             try {
 
-                System.out.println(
+            	LOGGER.info(
                         "Closing RabbitMQ connection...");
 
                 currentConnection.close();
 
             } catch (IOException e) {
 
-                System.err.println(
+            	LOGGER.error(
                         "Error while closing RabbitMQ connection: "
                                 + e.getMessage());
 
@@ -130,7 +136,7 @@ public class ConnectionManager implements AutoCloseable {
 
         } else {
 
-            System.out.println(
+        	LOGGER.info(
                     "RabbitMQ connection already closed.");
         }
     }

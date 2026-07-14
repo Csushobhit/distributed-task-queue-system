@@ -1,11 +1,17 @@
 package com.sushobhit.taskqueue.consumer.processor;
 
 import com.sushobhit.taskqueue.message.TaskMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public class ImageResizeTaskProcessor
         implements TaskProcessor {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    ImageResizeTaskProcessor.class);
 
     @Override
     public void process(TaskMessage task)
@@ -38,25 +44,24 @@ public class ImageResizeTaskProcessor
             Number height =
                     (Number) payload.get("height");
 
-            System.out.println(
-                    "Processing image resize task. TaskId="
-                            + task.getTaskId());
+            LOGGER.info(
+                    "Processing image resize task. TaskId={}",
+                    task.getTaskId());
 
-            System.out.println(
-                    "ImageId="
-                            + imageId);
+            LOGGER.info(
+                    "ImageId={}",
+                    imageId);
 
-            System.out.println(
-                    "Target Size="
-                            + width.intValue()
-                            + "x"
-                            + height.intValue());
+            LOGGER.info(
+                    "Target Size={}x{}",
+                    width.intValue(),
+                    height.intValue());
 
             Thread.sleep(1000);
 
-            System.out.println(
-                    "Image resize task completed successfully. TaskId="
-                            + task.getTaskId());
+            LOGGER.info(
+                    "Image resize task completed successfully. TaskId={}",
+                    task.getTaskId());
 
         } catch (InterruptedException e) {
 

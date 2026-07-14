@@ -1,10 +1,16 @@
 package com.sushobhit.taskqueue.consumer.processor;
 
 import com.sushobhit.taskqueue.message.TaskMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public class EmailTaskProcessor implements TaskProcessor {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(
+                    EmailTaskProcessor.class);
 
     @Override
     public void process(TaskMessage task)
@@ -65,27 +71,27 @@ public class EmailTaskProcessor implements TaskProcessor {
                         "Email body cannot be empty.");
             }
 
-            System.out.println(
-                    "Processing email task. TaskId="
-                            + task.getTaskId());
+            LOGGER.info(
+                    "Processing email task. TaskId={}",
+                    task.getTaskId());
 
-            System.out.println(
-                    "Recipient="
-                            + recipient);
+            LOGGER.info(
+                    "Recipient={}",
+                    recipient);
 
-            System.out.println(
-                    "Subject="
-                            + subject);
+            LOGGER.info(
+                    "Subject={}",
+                    subject);
 
-            System.out.println(
-                    "Body Length="
-                            + body.length());
+            LOGGER.info(
+                    "Body Length={}",
+                    body.length());
 
             Thread.sleep(500);
 
-            System.out.println(
-                    "Email task completed successfully. TaskId="
-                            + task.getTaskId());
+            LOGGER.info(
+                    "Email task completed successfully. TaskId={}",
+                    task.getTaskId());
 
         } catch (InterruptedException e) {
 
