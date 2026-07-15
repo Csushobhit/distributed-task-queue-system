@@ -29,6 +29,9 @@ import com.sushobhit.taskqueue.common.MetricsManager;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
+import org.springframework.stereotype.Component;
+
+@Component
 public class Producer implements AutoCloseable {
 	
 	private static final Logger LOGGER =
