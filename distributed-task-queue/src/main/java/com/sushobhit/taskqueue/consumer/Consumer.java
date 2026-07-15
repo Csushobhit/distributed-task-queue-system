@@ -32,6 +32,13 @@ import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sushobhit.taskqueue.common.MetricsManager;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.Tags;
+
 
 public class Consumer implements Runnable, AutoCloseable {
 
@@ -70,6 +77,19 @@ public class Consumer implements Runnable, AutoCloseable {
                     .registerModule(
                             new JavaTimeModule());
     
+    private final MeterRegistry meterRegistry =
+            MetricsManager.getRegistry();
+
+    private Counter tasksConsumedCounter;
+
+    private Counter tasksProcessedCounter;
+
+    private Counter tasksRetriedCounter;
+
+    private Counter tasksDlqCounter;
+
+    private Timer processingTimer;
+    
     
 private class TaskMessageHandler extends DefaultConsumer {
 
@@ -100,7 +120,8 @@ public void handleDelivery(
         AMQP.BasicProperties properties,
         byte[] body)
         throws IOException {
-
+	
+	tasksConsumedCounter.increment();
     long deliveryTag =
             envelope.getDeliveryTag();
 
@@ -108,6 +129,8 @@ public void handleDelivery(
             envelope.getRoutingKey();
     String originalRoutingKey =
             routingKey;
+    
+    
 
     LOGGER.info(
             "Received message. DeliveryTag="
@@ -202,19 +225,27 @@ public void handleDelivery(
                     "Executing processor: "
                             + processor.getClass()
                             .getSimpleName());
-
+        	
+        	Timer.Sample sample =
+        	        Timer.start(meterRegistry); 
+        	
             processor.process(
                     taskMessage);
 
             processingSuccessful = true;
+            
+            sample.stop(processingTimer);
+            tasksProcessedCounter.increment();
 
             LOGGER.info(
                     "Processor completed successfully. TaskId="
                             + taskMessage.getTaskId());
 
         } catch (Exception e) {
-
+        	
+        	
             processingSuccessful = false;
+            tasksProcessedCounter.increment();
 
             LOGGER.error(
                     "Processor execution failed. TaskId="
@@ -237,7 +268,8 @@ public void handleDelivery(
         	LOGGER.error(
                     "Message cannot be processed or retried. Sending to DLQ. DeliveryTag="
                             + deliveryTag);
-
+        	
+        	tasksDlqCounter.increment();
             this.getChannel().basicNack(
                     deliveryTag,
                     false,
@@ -293,12 +325,13 @@ public void handleDelivery(
 
         	    LOGGER.info(
         	            "Retry attempt "
+        	    		
         	                    + nextRetryCount
         	                    + " of "
         	                    + MAX_RETRIES
         	                    + " for TaskId="
         	                    + taskMessage.getTaskId());
-
+        	    tasksRetriedCounter.increment();
         	    long exponentialDelay =
         	            BASE_DELAY_MILLIS
         	                    * (long) Math.pow(
@@ -339,6 +372,7 @@ public void handleDelivery(
         	        LOGGER.error(
         	                "Retry delay interrupted. Sending message to DLQ.");
 
+        	        tasksDlqCounter.increment();
         	        this.getChannel().basicNack(
         	                deliveryTag,
         	                false,
@@ -399,7 +433,8 @@ public void handleDelivery(
         	                publishChannel.close();
 
         	            } catch (Exception e) {
-
+        	            	
+        	            	
         	            	LOGGER.error(
         	                        "Failed to close retry publish channel.");
 
@@ -409,11 +444,13 @@ public void handleDelivery(
         	    }
 
         	} else {
+        		
 
         		LOGGER.error(
         	            "Maximum retry limit reached. Sending message to DLQ. DeliveryTag="
         	                    + deliveryTag);
-
+        		
+        		tasksDlqCounter.increment();
         	    this.getChannel().basicNack(
         	            deliveryTag,
         	            false,
@@ -464,6 +501,40 @@ public void handleShutdownSignal(
         }
 
         this.queueName = queueName;
+        this.tasksConsumedCounter =
+                meterRegistry.counter(
+                        "tasks.consumed.total",
+                        "queue",
+                        queueName);
+
+        this.tasksProcessedCounter =
+                meterRegistry.counter(
+                        "tasks.processed.total",
+                        "queue",
+                        queueName);
+
+        this.tasksRetriedCounter =
+                meterRegistry.counter(
+                        "tasks.retried.total",
+                        "queue",
+                        queueName);
+
+        this.tasksDlqCounter =
+                meterRegistry.counter(
+                        "tasks.dlq.total",
+                        "queue",
+                        queueName);
+
+        this.processingTimer =
+                Timer.builder(
+                        "task.processing.time")
+                        .description(
+                                "Task processing duration")
+                        .tag(
+                                "queue",
+                                queueName)
+                        .register(
+                                meterRegistry);
 
         LOGGER.info(
                 "Initializing Consumer for queue: "

@@ -25,6 +25,10 @@ import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sushobhit.taskqueue.common.MetricsManager;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 public class Producer implements AutoCloseable {
 	
 	private static final Logger LOGGER =
@@ -41,7 +45,26 @@ public class Producer implements AutoCloseable {
     private static final ObjectMapper objectMapper =
             new ObjectMapper().registerModule(
                     new JavaTimeModule());
+    
+    private final MeterRegistry meterRegistry =
+            MetricsManager.getRegistry();
 
+    private final Counter tasksProducedCounter =
+            Counter.builder(
+                    "tasks.produced.total")
+                    .description(
+                            "Total number of tasks produced")
+                    .register(
+                            meterRegistry);
+
+    private final Counter tasksProduceFailedCounter =
+            Counter.builder(
+                    "tasks.produce.failed.total")
+                    .description(
+                            "Total number of failed task publications")
+                    .register(
+                            meterRegistry);
+    
     public Producer() throws IOException, TimeoutException {
 
         ConnectionManager.initialize();
@@ -278,7 +301,8 @@ public class Producer implements AutoCloseable {
                             StandardCharsets.UTF_8);
 
         } catch (Exception e) {
-
+        	
+        	tasksProduceFailedCounter.increment();
             throw new IOException(
                     "Failed to serialize task message.",
                     e);
@@ -308,6 +332,7 @@ public class Producer implements AutoCloseable {
                     properties,
                     messageBody
             );
+            tasksProducedCounter.increment();
 
             LOGGER.info(
                     "Task published successfully. TaskId="
@@ -318,7 +343,8 @@ public class Producer implements AutoCloseable {
                             + routingKey);
 
         } catch (IOException e) {
-
+        	
+        	tasksProduceFailedCounter.increment();
             if (deliveryTag != -1) {
 
                 outstandingConfirms.remove(
@@ -329,7 +355,8 @@ public class Producer implements AutoCloseable {
                     "Error during message publishing.",
                     e);
         } catch (Exception e) {
-
+        	
+        	tasksProduceFailedCounter.increment();
             if (deliveryTag != -1) {
 
                 outstandingConfirms.remove(

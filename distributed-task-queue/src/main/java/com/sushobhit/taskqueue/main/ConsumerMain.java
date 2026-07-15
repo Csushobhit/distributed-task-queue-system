@@ -1,9 +1,15 @@
 package com.sushobhit.taskqueue.main;
 
 import com.sushobhit.taskqueue.common.ConnectionManager;
+import com.sushobhit.taskqueue.common.MetricsManager;
 import com.sushobhit.taskqueue.consumer.Consumer;
+
+import io.prometheus.client.exporter.HTTPServer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.InetSocketAddress;
 
 public class ConsumerMain {
 
@@ -16,12 +22,26 @@ public class ConsumerMain {
 
     public static void main(String[] args) {
 
+        HTTPServer metricsServer = null;
+
         LOGGER.info(
                 "Starting Consumer Application...");
 
         Consumer consumer = null;
 
         try {
+
+            metricsServer =
+                    new HTTPServer(
+                            new InetSocketAddress(
+                                    8081),
+                            MetricsManager
+                                    .getPrometheusRegistry()
+                                    .getPrometheusRegistry(),
+                            true);
+
+            LOGGER.info(
+                    "Prometheus metrics endpoint started on port 8081.");
 
             consumer =
                     new Consumer(
@@ -43,6 +63,8 @@ public class ConsumerMain {
 
             Consumer finalConsumer =
                     consumer;
+            HTTPServer finalMetricsServer =
+                    metricsServer;
 
             Runtime.getRuntime()
                     .addShutdownHook(
@@ -65,6 +87,11 @@ public class ConsumerMain {
                                             e);
                                 }
 
+                                if (finalMetricsServer != null) {
+
+                                    finalMetricsServer.stop();
+                                }
+
                                 ConnectionManager.closeConnection();
 
                                 LOGGER.info(
@@ -79,6 +106,11 @@ public class ConsumerMain {
             LOGGER.error(
                     "Failed to start consumer application.",
                     e);
+
+            if (metricsServer != null) {
+
+                metricsServer.stop();
+            }
 
             ConnectionManager.closeConnection();
         }
