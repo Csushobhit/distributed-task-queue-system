@@ -13,9 +13,11 @@ public class TaskMessage implements Serializable {
     private Map<String, Object> payload;
     private Instant timestamp;
     private int retryCount;
+    private Integer priority;
 
     public TaskMessage() {
         this.retryCount = 0;
+        this.priority = null;
     }
 
     public TaskMessage(UUID taskId,
@@ -23,11 +25,21 @@ public class TaskMessage implements Serializable {
                        Map<String, Object> payload,
                        Instant timestamp,
                        int retryCount) {
+        this(taskId, taskType, payload, timestamp, retryCount, null);
+    }
+
+    public TaskMessage(UUID taskId,
+                       String taskType,
+                       Map<String, Object> payload,
+                       Instant timestamp,
+                       int retryCount,
+                       Integer priority) {
         this.taskId = taskId;
         this.taskType = taskType;
         this.payload = payload;
         this.timestamp = timestamp;
         this.retryCount = retryCount;
+        this.priority = priority;
     }
 
     public UUID getTaskId() {
@@ -70,6 +82,14 @@ public class TaskMessage implements Serializable {
         this.retryCount = retryCount;
     }
 
+    public Integer getPriority() {
+        return priority;
+    }
+
+    public void setPriority(Integer priority) {
+        this.priority = priority;
+    }
+
     @Override
     public String toString() {
         return "TaskMessage{" +
@@ -78,6 +98,7 @@ public class TaskMessage implements Serializable {
                 ", payload=" + Objects.toString(payload, "null") +
                 ", timestamp=" + Objects.toString(timestamp, "null") +
                 ", retryCount=" + retryCount +
+                ", priority=" + Objects.toString(priority, "null") +
                 '}';
     }
 
@@ -92,11 +113,19 @@ public class TaskMessage implements Serializable {
                 Objects.equals(taskId, that.taskId) &&
                 Objects.equals(taskType, that.taskType) &&
                 Objects.equals(payload, that.payload) &&
-                Objects.equals(timestamp, that.timestamp);
+                Objects.equals(timestamp, that.timestamp) &&
+                Objects.equals(priority, that.priority);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(taskId, taskType, payload, timestamp, retryCount);
+        return Objects.hash(
+                taskId,
+                taskType,
+                payload,
+                timestamp,
+                retryCount,
+                priority
+        );
     }
 }

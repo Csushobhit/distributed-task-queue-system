@@ -3,11 +3,15 @@ package com.sushobhit.taskqueue.main;
 import com.sushobhit.taskqueue.common.ConnectionManager;
 import com.sushobhit.taskqueue.common.MetricsManager;
 import com.sushobhit.taskqueue.consumer.Consumer;
+import com.sushobhit.taskqueue.producer.service.TaskStatusService;
 
 import io.prometheus.client.exporter.HTTPServer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 import java.net.InetSocketAddress;
 
@@ -24,12 +28,23 @@ public class ConsumerMain {
 
         HTTPServer metricsServer = null;
 
+        ConfigurableApplicationContext context = null;
+
         LOGGER.info(
                 "Starting Consumer Application...");
 
         Consumer consumer = null;
 
         try {
+
+            context =
+                    SpringApplication.run(
+                            ConsumerMain.class,
+                            args);
+
+            TaskStatusService taskStatusService =
+                    context.getBean(
+                            TaskStatusService.class);
 
             metricsServer =
                     new HTTPServer(
@@ -45,7 +60,8 @@ public class ConsumerMain {
 
             consumer =
                     new Consumer(
-                            QUEUE_NAME);
+                            QUEUE_NAME,
+                            taskStatusService);
 
             Thread consumerThread =
                     new Thread(
@@ -63,8 +79,12 @@ public class ConsumerMain {
 
             Consumer finalConsumer =
                     consumer;
+
             HTTPServer finalMetricsServer =
                     metricsServer;
+
+            ConfigurableApplicationContext finalContext =
+                    context;
 
             Runtime.getRuntime()
                     .addShutdownHook(
@@ -94,6 +114,11 @@ public class ConsumerMain {
 
                                 ConnectionManager.closeConnection();
 
+                                if (finalContext != null) {
+
+                                    finalContext.close();
+                                }
+
                                 LOGGER.info(
                                         "Consumer application shutdown complete.");
                             }));
@@ -113,6 +138,11 @@ public class ConsumerMain {
             }
 
             ConnectionManager.closeConnection();
+
+            if (context != null) {
+
+                context.close();
+            }
         }
     }
 }

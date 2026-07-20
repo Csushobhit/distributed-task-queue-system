@@ -38,7 +38,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Tags;
-
+import com.sushobhit.taskqueue.producer.service.TaskStatusService;
 
 public class Consumer implements Runnable, AutoCloseable {
 
@@ -52,6 +52,8 @@ public class Consumer implements Runnable, AutoCloseable {
     private Channel channel;
 
     private String consumerTag;
+    private final TaskStatusService taskStatusService;
+    
     
     private static final int MAX_RETRIES = 3;
     
@@ -229,8 +231,15 @@ public void handleDelivery(
         	Timer.Sample sample =
         	        Timer.start(meterRegistry); 
         	
+        	taskStatusService.markProcessing(
+        	        taskMessage.getTaskId());
+        	
             processor.process(
                     taskMessage);
+            
+            taskStatusService.markCompleted(
+                    taskMessage.getTaskId(),
+                    "Task completed successfully.");
 
             processingSuccessful = true;
             
@@ -252,6 +261,9 @@ public void handleDelivery(
                             + taskMessage.getTaskId());
 
             e.printStackTrace();
+            taskStatusService.markFailed(
+                    taskMessage.getTaskId(),
+                    e.getMessage());
         }
 
     } else {
@@ -491,7 +503,7 @@ public void handleShutdownSignal(
 }
     
 
-    public Consumer(String queueName) {
+    public Consumer(String queueName, TaskStatusService taskStatusService) {
 
         if (queueName == null
                 || queueName.trim().isEmpty()) {
@@ -535,6 +547,8 @@ public void handleShutdownSignal(
                                 queueName)
                         .register(
                                 meterRegistry);
+        
+        this.taskStatusService = taskStatusService;
 
         LOGGER.info(
                 "Initializing Consumer for queue: "
@@ -622,6 +636,9 @@ public void handleShutdownSignal(
         queueArguments.put(
                 "x-dead-letter-routing-key",
                 this.queueName);
+        queueArguments.put(
+                "x-max-priority",
+                10);
 
         AMQP.Queue.DeclareOk declareOk =
                 channel.queueDeclare(

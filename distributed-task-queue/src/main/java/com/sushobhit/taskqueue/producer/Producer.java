@@ -38,6 +38,7 @@ public class Producer implements AutoCloseable {
 	        LoggerFactory.getLogger(Producer.class);
 
     private static final String EXCHANGE_NAME = "tasks_exchange";
+    private static final int MAX_QUEUE_PRIORITY = 10;
 
     private final Channel channel;
 
@@ -311,11 +312,33 @@ public class Producer implements AutoCloseable {
                     e);
         }
 
+        Integer requestedPriority =
+                task.getPriority();
+
+        int priorityToSend = 0;
+
+        if (requestedPriority != null) {
+
+            if (requestedPriority < 0) {
+
+                priorityToSend = 0;
+
+            } else if (requestedPriority > MAX_QUEUE_PRIORITY) {
+
+                priorityToSend = MAX_QUEUE_PRIORITY;
+
+            } else {
+
+                priorityToSend = requestedPriority;
+            }
+        }
+
         AMQP.BasicProperties properties =
                 MessageProperties.PERSISTENT_TEXT_PLAIN
                         .builder()
                         .contentType("application/json")
                         .deliveryMode(2)
+                        .priority(priorityToSend)
                         .build();
 
         long deliveryTag = -1;

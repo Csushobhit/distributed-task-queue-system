@@ -3,6 +3,7 @@ package com.sushobhit.taskqueue.producer.controller;
 import com.sushobhit.taskqueue.message.TaskMessage;
 import com.sushobhit.taskqueue.producer.Producer;
 import com.sushobhit.taskqueue.producer.dto.TaskSubmissionRequest;
+import com.sushobhit.taskqueue.producer.service.TaskStatusService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,13 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+import com.sushobhit.taskqueue.common.model.TaskStatus;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+import java.util.Optional;
+
 @RestController
 @RequestMapping("/api/v1/tasks")
 public class TaskController {
@@ -31,15 +39,18 @@ public class TaskController {
 
     private final Producer taskProducer;
 
+    private final TaskStatusService taskStatusService;
+
     @Autowired
     public TaskController(
-            Producer taskProducer) {
-
-        this.taskProducer =
-                taskProducer;
+            Producer taskProducer,
+            TaskStatusService taskStatusService
+    ) {
+        this.taskProducer = taskProducer;
+        this.taskStatusService = taskStatusService;
 
         LOGGER.info(
-                "TaskController initialized with Producer instance.");
+                "TaskController initialized with Producer and TaskStatusService.");
     }
 
     @PostMapping
@@ -108,6 +119,23 @@ public class TaskController {
                     "Successfully submitted task [{}] to producer.",
                     taskMessage.getTaskId());
 
+            try {
+
+                taskStatusService.createTaskRecord(
+                        taskMessage.getTaskId());
+
+                LOGGER.info(
+                        "Successfully created initial ACCEPTED status record for task [{}].",
+                        taskMessage.getTaskId());
+
+            } catch (Exception e) {
+
+                LOGGER.error(
+                        "Failed to create initial status record for task [{}], but task was sent to queue.",
+                        taskMessage.getTaskId(),
+                        e);
+            }
+
             Map<String, String> response =
                     Map.of(
                             "taskId",
@@ -135,5 +163,55 @@ public class TaskController {
                                     "error",
                                     "Failed to enqueue task. Please check server logs or try again later."));
         }
+    }
+    
+    @GetMapping("/{taskId}")
+    public ResponseEntity<?> getTaskStatus(
+            @PathVariable UUID taskId) {
+
+        LOGGER.info(
+                "Received status request for Task ID: {}",
+                taskId);
+
+        Optional<TaskStatus> taskStatus =
+                taskStatusService.getTaskStatus(taskId);
+
+        if (taskStatus.isPresent()) {
+
+            TaskStatus status =
+                    taskStatus.get();
+
+            Map<String, Object> response =
+                    Map.of(
+                            "taskId",
+                            status.getTaskId(),
+
+                            "status",
+                            status.getStatus().name(),
+
+                            "lastUpdated",
+                            status.getUpdatedAt().toString(),
+
+                            "resultMessage",
+                            status.getResultMessage() != null
+                                    ? status.getResultMessage()
+                                    : ""
+                    );
+
+            return ResponseEntity
+                    .ok(response);
+        }
+
+        LOGGER.warn(
+                "Status not found for Task ID: {}",
+                taskId);
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(
+                        Map.of(
+                                "error",
+                                "Task status not found for ID: "
+                                        + taskId));
     }
 }
